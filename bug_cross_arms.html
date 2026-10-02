@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>【再現バグ画面】腕クロス事件 (BALL 1980)</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 20px;
+    background: #2b2b2b;
+    color: #333;
+    font-family: 'Courier New', Courier, monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    user-select: none;
+  }
+  .device-case {
+    background: linear-gradient(135deg, #d4d4d4 0%, #b0b0b0 50%, #999 100%);
+    border-radius: 20px;
+    padding: 20px 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.6), inset 0 2px 4px rgba(255,255,255,0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 360px;
+    border: 3px solid #888;
+  }
+  .brand {
+    font-weight: bold;
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: #800;
+    margin-bottom: 6px;
+    text-shadow: 0 1px 1px rgba(255,255,255,0.5);
+  }
+  .model-name {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: #444;
+    margin-bottom: 10px;
+  }
+  .screen-frame {
+    background: #555;
+    padding: 8px;
+    border-radius: 8px;
+    box-shadow: inset 0 3px 6px rgba(0,0,0,0.8);
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  canvas {
+    background: #c5cdb5;
+    display: block;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.15);
+    border-radius: 4px;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+  }
+  .caption {
+    margin-top: 15px;
+    color: #ff6b6b;
+    font-size: 13px;
+    font-weight: bold;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="device-case">
+  <div class="brand">Narukichi</div>
+  <div class="model-name">ELECTRONIC GAME  BALL</div>
+
+  <div class="screen-frame">
+    <canvas id="lcd" width="320" height="240"></canvas>
+  </div>
+</div>
+
+<div class="caption">
+  ⚠️ 【AIの初期バグ再現】関節がなく、胸を貫通して腕がクロスしたジャグラー
+</div>
+
+<script>
+const canvas = document.getElementById('lcd');
+const ctx = canvas.getContext('2d');
+
+const COLOR_LCD = '#182015';
+const COLOR_SHADOW = '#bcc5ab';
+
+// ボール軌道の非点灯跡
+const ALL_TRAJS = [
+  [{x: 95, y: 130}, {x: 92, y: 98}, {x: 100, y: 68}, {x: 118, y: 46}, {x: 138, y: 32}, {x: 160, y: 28}, {x: 182, y: 32}, {x: 202, y: 46}, {x: 220, y: 68}, {x: 228, y: 98}, {x: 225, y: 130}],
+  [{x: 136, y: 125}, {x: 132, y: 98}, {x: 138, y: 76}, {x: 148, y: 62}, {x: 160, y: 58}, {x: 172, y: 62}, {x: 182, y: 76}, {x: 188, y: 98}, {x: 184, y: 125}]
+];
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // ヘッダー
+  ctx.fillStyle = COLOR_LCD;
+  ctx.font = 'bold 14px "Courier New", monospace';
+  ctx.fillText('GAME A', 16, 24);
+  ctx.fillText('SCORE 000', 215, 24);
+
+  // ボールのシャドウ
+  ctx.fillStyle = COLOR_SHADOW;
+  for (let traj of ALL_TRAJS) {
+    for (let pt of traj) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // 右端に落ちてきたボール（点灯）
+  ctx.fillStyle = COLOR_LCD;
+  ctx.beginPath();
+  ctx.arc(225, 130, 6.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ジャグラー本体
+  const cx = 160;
+  const cy = 162;
+  const headY = cy - 35;
+
+  ctx.fillStyle = COLOR_LCD;
+  ctx.strokeStyle = COLOR_LCD;
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+
+  // 頭
+  ctx.beginPath();
+  ctx.arc(cx, headY, 11, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx - 12, headY, 3, 0, Math.PI * 2);
+  ctx.arc(cx + 12, headY, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, headY - 12, 3, 0, Math.PI * 2);
+  ctx.fill();
+  // 白目と瞳
+  ctx.fillStyle = '#c5cdb5';
+  ctx.beginPath();
+  ctx.arc(cx - 4, headY - 3, 3, 0, Math.PI * 2);
+  ctx.arc(cx + 4, headY - 3, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = COLOR_LCD;
+  ctx.beginPath();
+  ctx.arc(cx - 4, headY - 4, 1.5, 0, Math.PI * 2);
+  ctx.arc(cx + 4, headY - 4, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 首
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(cx, headY + 11);
+  ctx.lineTo(cx, cy - 16);
+  ctx.stroke();
+
+  // 胴体
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - 4, 11, 14, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 足（直立）
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(cx - 6, cy + 9);
+  ctx.lineTo(cx - 6, cy + 27);
+  ctx.stroke();
+  ctx.fillRect(cx - 14, cy + 24, 8, 4);
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 6, cy + 9);
+  ctx.lineTo(cx + 6, cy + 27);
+  ctx.stroke();
+  ctx.fillRect(cx + 6, cy + 24, 8, 4);
+
+  // ⚠️ 【AIの珍バグ：関節なし・胸を貫通してバッテン交差する腕】
+  // 左肩（cx - 10, cy - 6）から、胸を突き抜けて右端のボール（225, 130）へ一直線！
+  ctx.strokeStyle = COLOR_LCD;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, cy - 6);
+  ctx.lineTo(225, 130);
+  ctx.stroke();
+  // 左手お椀
+  ctx.beginPath();
+  ctx.arc(225, 130, 6.5, 0, Math.PI);
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // 右肩（cx + 10, cy - 6）から、胸を突き抜けて左内側（136, 125）へ一直線！
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(cx + 10, cy - 6);
+  ctx.lineTo(136, 125);
+  ctx.stroke();
+  // 右手お椀
+  ctx.beginPath();
+  ctx.arc(136, 125, 6.5, 0, Math.PI);
+  ctx.lineWidth = 3;
+  ctx.stroke();
+}
+
+draw();
+</script>
+</body>
+</html>

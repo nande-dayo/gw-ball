@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RETRO LCD GAME: BALL (1980) | Narukichi</title>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    padding: 15px 10px;
+    background: #2b2b2b;
+    color: #333;
+    font-family: 'Courier New', Courier, monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  /* ゲーム＆ウオッチ本体フレーム（シルバーシリーズ） */
+  .device-case {
+    background: linear-gradient(135deg, #d4d4d4 0%, #b0b0b0 50%, #999 100%);
+    border-radius: 20px;
+    padding: 20px 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.6), inset 0 2px 4px rgba(255,255,255,0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 360px;
+    border: 3px solid #888;
+  }
+  .brand {
+    font-weight: bold;
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: #800;
+    margin-bottom: 6px;
+    text-shadow: 0 1px 1px rgba(255,255,255,0.5);
+  }
+  .model-name {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: #444;
+    margin-bottom: 10px;
+  }
+  /* 液晶画面枠 */
+  .screen-frame {
+    background: #555;
+    padding: 8px;
+    border-radius: 8px;
+    box-shadow: inset 0 3px 6px rgba(0,0,0,0.8);
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  /* 液晶（LCD）スクリーン */
+  canvas {
+    background: #c5cdb5; /* 懐かしの黄緑がかった液晶グレー */
+    display: block;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.15);
+    border-radius: 4px;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+  }
+  /* コントローラーボタン */
+  .controls {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    margin-top: 18px;
+    padding: 0 10px;
+  }
+  .btn-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .game-btn {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #881111, #440000);
+    border: none;
+    box-shadow: 0 6px 0 #220000, 0 8px 12px rgba(0,0,0,0.4);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .game-btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #220000, 0 4px 6px rgba(0,0,0,0.4);
+  }
+  .btn-label {
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #333;
+  }
+  .sub-controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .sub-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+    background: #eee;
+    border: 1px solid #777;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sub-btn:hover { background: #fff; }
+  .instructions {
+    margin-top: 15px;
+    color: #aaa;
+    font-size: 11px;
+    text-align: center;
+    max-width: 360px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<div class="device-case">
+  <div class="brand">Narukichi</div>
+  <div class="model-name">ELECTRONIC GAME  BALL</div>
+
+  <div class="screen-frame">
+    <canvas id="lcd" width="320" height="240"></canvas>
+  </div>
+
+  <div class="sub-controls">
+    <button class="sub-btn" onclick="setMode('A')">GAME A (1球)</button>
+    <button class="sub-btn" onclick="setMode('B')">GAME B (2球)</button>
+    <button class="sub-btn" onclick="toggleAudio()">SOUND: <span id="snd-label">ON</span></button>
+  </div>
+
+  <div class="controls">
+    <div class="btn-group">
+      <button class="game-btn" id="btnLeft" aria-label="Left"></button>
+      <div class="btn-label">LEFT (←)</div>
+    </div>
+    <div class="btn-group">
+      <button class="game-btn" id="btnRight" aria-label="Right"></button>
+      <div class="btn-label">RIGHT (→)</div>
+    </div>
+  </div>
+</div>
+
+<div class="instructions">
+  スマホ：画面の赤い丸ボタンをタップ<br>
+  PCキーボード：<b>[←] [→]</b> または <b>[A] [D]</b>
+</div>
+
+<script>
+// --- Web Audio API（ピコピコ電子音の生成） ---
+let audioCtx = null;
+let soundEnabled = true;
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playTone(freq, duration, type = "square") {
+  if (!soundEnabled) return;
+  initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function sndMove() { playTone(880, 0.03); }    // ピッ
+function sndCatch() {                           // ピピッ
+  playTone(1320, 0.04);
+  setTimeout(() => playTone(1760, 0.05), 50);
+}
+function sndGameOver() {                        // ブーー
+  playTone(220, 0.4, "sawtooth");
+}
+
+function toggleAudio() {
+  soundEnabled = !soundEnabled;
+  document.getElementById('snd-label').innerText = soundEnabled ? 'ON' : 'OFF';
+}
+
+// --- ゲームロジック ---
+const canvas = document.getElementById('lcd');
+const ctx = canvas.getContext('2d');
+
+const COLOR_LCD = '#182015';        // 点灯セグメント（濃い黒緑）
+const COLOR_SHADOW = '#bcc5ab';     // 非点灯セグメントの跡
+
+// ゾーンごとの手の位置 (x, y) - 肘を水平に固定し、そこから前腕が伸びる実機配置
+// ゾーン0: 左外 (95, 130), ゾーン1: 左内 (136, 125), ゾーン2: 右内 (184, 125), ゾーン3: 右外 (225, 130)
+const HAND_POS = {
+  0: {x: 95, y: 130},   // 左外
+  1: {x: 136, y: 125},  // 左内（頭のすぐ左脇）
+  2: {x: 184, y: 125},  // 右内（頭のすぐ右脇）
+  3: {x: 225, y: 130}   // 右外
+};
+
+// プレイヤー腕のポジション：2状態（連動シフト）
+// 0 (左構え): 左手=外(0), 右手=内(2) -> 両手が同時に左向き！カバー: [0, 2]
+// 1 (右構え): 左手=内(1), 右手=外(3) -> 両手が同時に右向き！カバー: [1, 3]
+const PLAYER_HANDS = {
+  0: { left: 0, right: 2 },
+  1: { left: 1, right: 3 }
+};
+
+const COVERAGE = {
+  0: [0, 2],
+  1: [1, 3]
+};
+
+// --- 全パターンの放物線軌道（実機セグメント配置） ---
+// 軌道A: 左外(0) <=> 右外(3)（大アーチ・11ステップ）
+const TRAJ_0_3 = [
+  {x: 95, y: 130}, {x: 92, y: 98}, {x: 100, y: 68}, {x: 118, y: 46}, {x: 138, y: 32},
+  {x: 160, y: 28}, {x: 182, y: 32}, {x: 202, y: 46}, {x: 220, y: 68}, {x: 228, y: 98}, {x: 225, y: 130}
+];
+const TRAJ_3_0 = [...TRAJ_0_3].reverse();
+
+// 軌道B: 左内(1) <=> 右内(2)（中アーチ・9ステップ）
+const TRAJ_1_2 = [
+  {x: 136, y: 125}, {x: 132, y: 98}, {x: 138, y: 76}, {x: 148, y: 62}, {x: 160, y: 58},
+  {x: 172, y: 62}, {x: 182, y: 76}, {x: 188, y: 98}, {x: 184, y: 125}
+];
+const TRAJ_2_1 = [...TRAJ_1_2].reverse();
+
+// 軌道C: 左外(0) <=> 右内(2)（斜め交差アーチ）
+const TRAJ_0_2 = [
+  {x: 95, y: 130}, {x: 94, y: 100}, {x: 104, y: 74}, {x: 120, y: 56}, {x: 140, y: 46},
+  {x: 158, y: 50}, {x: 172, y: 68}, {x: 182, y: 96}, {x: 184, y: 125}
+];
+const TRAJ_2_0 = [...TRAJ_0_2].reverse();
+
+// 軌道D: 左内(1) <=> 右外(3)（斜め交差アーチ）
+const TRAJ_3_1 = [
+  {x: 225, y: 130}, {x: 226, y: 100}, {x: 216, y: 74}, {x: 200, y: 56}, {x: 180, y: 46},
+  {x: 162, y: 50}, {x: 148, y: 68}, {x: 138, y: 96}, {x: 136, y: 125}
+];
+const TRAJ_1_3 = [...TRAJ_3_1].reverse();
+
+const ALL_TRAJS = [TRAJ_0_3, TRAJ_1_2, TRAJ_0_2, TRAJ_3_1, TRAJ_1_3, TRAJ_2_0];
+
+let mode = 'A'; // 'A' (1球) または 'B' (2球)
+let playerPos = 0; // 0: 左構え, 1: 右構え
+let score = 0;
+let gameState = 'WAITING'; // 'WAITING', 'PLAYING', 'GAMEOVER'
+let balls = [];
+let tickTimer = 0;
+let baseSpeed = 17; // 最初はかなりゆったり（約560ms）
+
+// 10点ごとの速度テーブル（20点超で以前の11になる設計）
+function calculateSpeed(s) {
+  if (s < 10) return 17; // 0〜9点: 超ゆったり
+  if (s < 20) return 14; // 10〜19点: 少し加速
+  if (s < 30) return 11; // 20〜29点: 前回のスピード！
+  if (s < 40) return 9;  // 30〜39点: スピーディー
+  return 7;              // 40点〜: チャレンジング
+}
+
+class Ball {
+  constructor(traj, sz, ez, delaySteps = 0) {
+    this.traj = traj;
+    this.sz = sz;
+    this.ez = ez;
+    this.delay = delaySteps;
+    this.step = delaySteps > 0 ? -1 : 0;
+    this.maxStep = traj.length - 1;
+    this.floatTimer = 0;
+    this.graceDeadline = null; // 手元での滑り込み猶予期限（0.3秒 = 300ms）
+    this.crushed = false;
+  }
+}
+
+function startGame() {
+  initAudio();
+  sndCatch();
+  playerPos = 0;
+  score = 0;
+  gameState = 'PLAYING';
+  baseSpeed = calculateSpeed(0);
+  tickTimer = 0;
+
+  balls = [
+    new Ball(TRAJ_0_3, 0, 3, 0)
+  ];
+
+  if (mode === 'B') {
+    balls.push(new Ball(TRAJ_3_0, 3, 0, 6));
+  }
+}
+
+function resetGame() {
+  startGame();
+}
+
+function setMode(m) {
+  mode = m;
+  startGame();
+}
+
+function getNextTrajectory(endZone, currentBall) {
+  let candidates = [];
+  if (endZone === 0) {
+    candidates = [
+      { traj: TRAJ_0_3, sz: 0, ez: 3, len: TRAJ_0_3.length },
+      { traj: TRAJ_0_2, sz: 0, ez: 2, len: TRAJ_0_2.length }
+    ];
+  } else if (endZone === 1) {
+    candidates = [
+      { traj: TRAJ_1_3, sz: 1, ez: 3, len: TRAJ_1_3.length },
+      { traj: TRAJ_1_2, sz: 1, ez: 2, len: TRAJ_1_2.length }
+    ];
+  } else if (endZone === 2) {
+    candidates = [
+      { traj: TRAJ_2_0, sz: 2, ez: 0, len: TRAJ_2_0.length },
+      { traj: TRAJ_2_1, sz: 2, ez: 1, len: TRAJ_2_1.length }
+    ];
+  } else {
+    candidates = [
+      { traj: TRAJ_3_0, sz: 3, ez: 0, len: TRAJ_3_0.length },
+      { traj: TRAJ_3_1, sz: 3, ez: 1, len: TRAJ_3_1.length }
+    ];
+  }
+
+  // 1球モード（GAME A）なら50%でランダムに切り替え
+  if (balls.length < 2) {
+    return Math.random() < 0.5 ? candidates[0] : candidates[1];
+  }
+
+  // 2球モード（GAME B）：もう1つのボールとの衝突回避
+  const otherBall = balls.find(b => b !== currentBall);
+  if (!otherBall || otherBall.step < 0) {
+    return Math.random() < 0.5 ? candidates[0] : candidates[1];
+  }
+
+  const otherRem = otherBall.maxStep - otherBall.step;
+  const diff0 = Math.abs((candidates[0].len - 1) - otherRem);
+  const diff1 = Math.abs((candidates[1].len - 1) - otherRem);
+
+  // 落下差が1歩以下（ほぼ同時落下）になりそうな危険な軌道だけをブロック！
+  const safe0 = diff0 >= 2;
+  const safe1 = diff1 >= 2;
+
+  if (safe0 && !safe1) return candidates[0]; // 0だけが安全
+  if (!safe0 && safe1) return candidates[1]; // 1だけが安全
+
+  // 両方とも安全なら、軌道が固定化しないようランダムに選ぶ（これでループ解消！）
+  return Math.random() < 0.5 ? candidates[0] : candidates[1];
+}
+
+function checkCatchOnMove() {
+  // 手を動かした瞬間に、手元で猶予中のボールがあれば滑り込みセーフ！
+  const now = performance.now();
+  for (let b of balls) {
+    if (b.step === b.maxStep && b.graceDeadline !== null) {
+      if (now <= b.graceDeadline) {
+        const covered = COVERAGE[playerPos];
+        if (covered.includes(b.ez)) {
+          // 滑り込みキャッチ大成功！
+          b.graceDeadline = null;
+          sndCatch();
+          score++;
+          baseSpeed = calculateSpeed(score);
+
+          const next = getNextTrajectory(b.ez, b);
+          b.traj = next.traj;
+          b.sz = next.sz;
+          b.ez = next.ez;
+          b.step = 0;
+          b.maxStep = next.traj.length - 1;
+          b.floatTimer = 0;
+        }
+      }
+    }
+  }
+}
+
+function moveLeft() {
+  initAudio();
+  if (gameState !== 'PLAYING') {
+    startGame();
+    return;
+  }
+  playerPos = 0; // 両手が同時に左向き！
+  checkCatchOnMove();
+}
+
+function moveRight() {
+  initAudio();
+  if (gameState !== 'PLAYING') {
+    startGame();
+    return;
+  }
+  playerPos = 1; // 両手が同時に右向き！
+  checkCatchOnMove();
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') moveLeft();
+  if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') moveRight();
+  if (e.key === '1') setMode('A');
+  if (e.key === '2') setMode('B');
+  if (e.key === 'r' || e.key === 'R' || e.key === ' ') {
+    if (gameState !== 'PLAYING') startGame();
+  }
+});
+
+// スマホ・タッチ操作（連打時の遅延・ズーム・二重発火を完全防止）
+const btnLeftEl = document.getElementById('btnLeft');
+const btnRightEl = document.getElementById('btnRight');
+
+btnLeftEl.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  moveLeft();
+});
+
+btnRightEl.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  moveRight();
+});
+
+// --- メインループ ---
+function update() {
+  if (gameState !== 'PLAYING') return;
+
+  const now = performance.now();
+
+  // 1. 手元での滑り込み猶予チェック（0.3秒 = 300ms）
+  for (let b of balls) {
+    if (b.step === b.maxStep && b.graceDeadline !== null) {
+      // 猶予中に構えが合っていれば即キャッチ
+      const covered = COVERAGE[playerPos];
+      if (covered.includes(b.ez)) {
+        b.graceDeadline = null;
+        sndCatch();
+        score++;
+        baseSpeed = calculateSpeed(score);
+
+        const next = getNextTrajectory(b.ez, b);
+        b.traj = next.traj;
+        b.sz = next.sz;
+        b.ez = next.ez;
+        b.step = 0;
+        b.maxStep = next.traj.length - 1;
+        b.floatTimer = 0;
+        continue;
+      }
+
+      // 0.3秒の猶予が切れたらゲームオーバー！
+      if (now > b.graceDeadline) {
+        b.graceDeadline = null;
+        sndGameOver();
+        b.crushed = true;
+        gameState = 'GAMEOVER';
+        return;
+      }
+    }
+  }
+
+  // 2. ボールのコマ送り（tickTimer更新）
+  tickTimer++;
+  if (tickTimer >= baseSpeed) {
+    tickTimer = 0;
+    let anyMoved = false;
+
+    const otherBallMap = {};
+    if (balls.length === 2) {
+      otherBallMap[0] = balls[1];
+      otherBallMap[1] = balls[0];
+    }
+
+    for (let i = 0; i < balls.length; i++) {
+      const b = balls[i];
+      const other = otherBallMap[i];
+
+      // すでに手元で猶予中のボールはコマ送りしない（手元に留まる）
+      if (b.step === b.maxStep && b.graceDeadline !== null) {
+        continue;
+      }
+
+      // 登場待ちカウントダウン
+      if (b.delay > 0) {
+        b.delay--;
+        if (b.delay === 0) {
+          b.step = 0;
+          anyMoved = true;
+        }
+        continue;
+      }
+
+      // 頂点付近でのふんわり滞空処理
+      if (b.floatTimer > 0) {
+        b.floatTimer--;
+        continue;
+      }
+
+      if (b.step < b.maxStep) {
+        b.step++;
+        anyMoved = true;
+
+        const apexStep = Math.floor(b.maxStep / 2);
+        if (b.step === apexStep && other && other.step >= 0) {
+          const remThis = b.maxStep - b.step;
+          const remOther = other.maxStep - other.step;
+          if (Math.abs(remThis - remOther) <= 1) {
+            b.floatTimer = 1;
+          }
+        }
+      }
+
+      // 落下点（手の高さ）に到達した瞬間の判定
+      if (b.step === b.maxStep) {
+        const covered = COVERAGE[playerPos];
+        if (covered.includes(b.ez)) {
+          // すでに手が合っていたら即座にキャッチ成功！
+          sndCatch();
+          score++;
+          baseSpeed = calculateSpeed(score);
+
+          const next = getNextTrajectory(b.ez, b);
+          b.traj = next.traj;
+          b.sz = next.sz;
+          b.ez = next.ez;
+          b.step = 0;
+          b.maxStep = next.traj.length - 1;
+          b.floatTimer = 0;
+        } else {
+          // まだ手が合っていない場合：即死させず【0.3秒の滑り込み猶予】を開始！
+          b.graceDeadline = performance.now() + 300;
+        }
+      }
+    }
+
+    if (anyMoved && gameState === 'PLAYING') {
+      sndMove();
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // ステータス表示
+  ctx.fillStyle = COLOR_LCD;
+  ctx.font = 'bold 14px "Courier New", monospace';
+  ctx.fillText('GAME ' + mode, 16, 24);
+  ctx.fillText(`SCORE ${String(score).padStart(3, '0')}`, 215, 24);
+
+  // 液晶セグメントの「シャドウ（非点灯跡）」を描画
+  ctx.fillStyle = COLOR_SHADOW;
+  ctx.strokeStyle = COLOR_SHADOW;
+
+  // ボールの非点灯跡
+  for (let traj of ALL_TRAJS) {
+    for (let pt of traj) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // 非点灯の腕・手・CRUSHの跡
+  drawCrushShadow();
+  drawJugglerShadow();
+
+  // 点灯しているボール
+  ctx.fillStyle = COLOR_LCD;
+  for (let b of balls) {
+    if (b.step >= 0 && b.step <= b.maxStep) {
+      const pt = b.traj[b.step];
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 6.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // ジャグラー（点灯セグメント）
+  drawJuggler();
+
+  // ゲームオーバー時のCRUSH!表示
+  if (gameState === 'GAMEOVER') {
+    drawCrushActive();
+
+    ctx.fillStyle = '#c5cdb5';
+    ctx.fillRect(55, 95, 210, 50);
+    ctx.strokeStyle = COLOR_LCD;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(55, 95, 210, 50);
+
+    ctx.fillStyle = COLOR_LCD;
+    ctx.font = 'bold 15px "Courier New", monospace';
+    ctx.fillText('GAME OVER', 112, 116);
+    ctx.font = '11px "Courier New", monospace';
+    ctx.fillText('PRESS [<-] OR [->] TO RESTART', 62, 134);
+  }
+
+  // 開始前の待機画面表示
+  if (gameState === 'WAITING') {
+    ctx.fillStyle = '#c5cdb5';
+    ctx.fillRect(45, 95, 230, 50);
+    ctx.strokeStyle = COLOR_LCD;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(45, 95, 230, 50);
+
+    ctx.fillStyle = COLOR_LCD;
+    ctx.font = 'bold 13px "Courier New", monospace';
+    const ballText = mode === 'A' ? '1 BALL' : '2 BALLS';
+    ctx.fillText(`READY? (GAME ${mode}: ${ballText})`, 65, 115);
+    ctx.font = '11px "Courier New", monospace';
+    ctx.fillText('PRESS [<-] OR [->] TO START', 62, 134);
+  }
+
+  requestAnimationFrame(() => {
+    update();
+    draw();
+  });
+}
+
+function drawJugglerShadow() {
+  // 非点灯の腕・足セグメントをうっすら表示
+  ctx.strokeStyle = COLOR_SHADOW;
+  ctx.fillStyle = COLOR_SHADOW;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  const cx = 160, cy = 162;
+  const leftElbow = { x: cx - 36, y: cy - 6 };
+  const rightElbow = { x: cx + 36, y: cy - 6 };
+
+  // 4本すべての前腕とお椀の跡
+  for (let i = 0; i < 4; i++) {
+    const hand = HAND_POS[i];
+    const elbow = i < 2 ? leftElbow : rightElbow;
+    ctx.beginPath();
+    ctx.moveTo(elbow.x, elbow.y);
+    ctx.lineTo(hand.x, hand.y);
+    ctx.stroke();
+
+    // お椀の跡
+    ctx.beginPath();
+    ctx.arc(hand.x, hand.y, 6, 0, Math.PI);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.lineWidth = 4;
+  }
+
+  // 非点灯の足の跡（跳ね上げ足と着地足のすべてのセグメント跡）
+  drawLeg(cx - 6, cy + 9, false, true, COLOR_SHADOW); // 左・着地
+  drawLeg(cx - 6, cy + 9, true, true, COLOR_SHADOW);  // 左・跳ね上げ
+  drawLeg(cx + 6, cy + 9, false, false, COLOR_SHADOW);// 右・着地
+  drawLeg(cx + 6, cy + 9, true, false, COLOR_SHADOW); // 右・跳ね上げ
+}
+
+function drawCrushShadow() {
+  ctx.fillStyle = COLOR_SHADOW;
+  ctx.font = 'italic bold 12px "Courier New", monospace';
+  ctx.save();
+  ctx.translate(45, 175);
+  ctx.rotate(-0.4);
+  ctx.fillText('CRUSH!', 0, 0);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(245, 160);
+  ctx.rotate(0.4);
+  ctx.fillText('CRUSH!', 0, 0);
+  ctx.restore();
+}
+
+function drawCrushActive() {
+  ctx.fillStyle = COLOR_LCD;
+  ctx.font = 'italic bold 13px "Courier New", monospace';
+  const b = balls[0];
+  if (!b) return;
+  if (b.ez === 0 || b.ez === 1) {
+    // 左側でミス
+    ctx.save();
+    ctx.translate(45, 175);
+    ctx.rotate(-0.4);
+    ctx.fillText('CRUSH!', 0, 0);
+    ctx.restore();
+    drawBrokenBall(60, 195);
+  } else {
+    // 右側でミス
+    ctx.save();
+    ctx.translate(245, 160);
+    ctx.rotate(0.4);
+    ctx.fillText('CRUSH!', 0, 0);
+    ctx.restore();
+    drawBrokenBall(250, 195);
+  }
+}
+
+function drawBrokenBall(x, y) {
+  ctx.fillStyle = COLOR_LCD;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const r = i % 2 === 0 ? 8 : 4;
+    const a = (i * Math.PI) / 4;
+    const px = x + Math.cos(a) * r;
+    const py = y + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawLeg(hipX, hipY, isKicking, isLeft, color) {
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+
+  if (!isKicking) {
+    // 直立着地足
+    ctx.beginPath();
+    ctx.moveTo(hipX, hipY);
+    ctx.lineTo(hipX, hipY + 18);
+    ctx.stroke();
+    // 靴
+    ctx.fillRect(isLeft ? hipX - 8 : hipX, hipY + 15, 8, 4);
+  } else {
+    // ヒョコッと跳ね上げた足（画像そのもののポーズ！）
+    const dir = isLeft ? -1 : 1;
+    ctx.beginPath();
+    ctx.moveTo(hipX, hipY);
+    ctx.lineTo(hipX + dir * 14, hipY + 8);
+    ctx.lineTo(hipX + dir * 20, hipY + 2);
+    ctx.stroke();
+    // 跳ね上げた足の靴
+    ctx.beginPath();
+    ctx.arc(hipX + dir * 21, hipY + 1, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawJuggler() {
+  const cx = 160;
+  const cy = 162;
+
+  ctx.fillStyle = COLOR_LCD;
+  ctx.strokeStyle = COLOR_LCD;
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+
+  // 1. 顔・頭部（丸顔＋耳＋白目と黒目＋頭のてっぺんの鼻）
+  const headY = cy - 35;
+  // 丸顔
+  ctx.beginPath();
+  ctx.arc(cx, headY, 11, 0, Math.PI * 2);
+  ctx.fill();
+  // 耳（左右）
+  ctx.beginPath();
+  ctx.arc(cx - 12, headY, 3, 0, Math.PI * 2);
+  ctx.arc(cx + 12, headY, 3, 0, Math.PI * 2);
+  ctx.fill();
+  // 鼻（頭のてっぺんにピョコッ）
+  ctx.beginPath();
+  ctx.arc(cx, headY - 12, 3, 0, Math.PI * 2);
+  ctx.fill();
+  // 目（白目）
+  ctx.fillStyle = '#c5cdb5';
+  ctx.beginPath();
+  ctx.arc(cx - 4, headY - 3, 3, 0, Math.PI * 2);
+  ctx.arc(cx + 4, headY - 3, 3, 0, Math.PI * 2);
+  ctx.fill();
+  // 瞳（黒目：ちょっと上目遣い）
+  ctx.fillStyle = COLOR_LCD;
+  ctx.beginPath();
+  ctx.arc(cx - 4, headY - 4, 1.5, 0, Math.PI * 2);
+  ctx.arc(cx + 4, headY - 4, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 2. 首
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(cx, headY + 11);
+  ctx.lineTo(cx, cy - 16);
+  ctx.stroke();
+
+  // 3. 胴体（ぽってり丸い楕円）
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - 4, 11, 14, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 4. 上腕（肩から肘まで：真横に水平固定！）
+  const leftElbow = { x: cx - 36, y: cy - 6 };
+  const rightElbow = { x: cx + 36, y: cy - 6 };
+  ctx.lineWidth = 5;
+  // 左上腕（水平）
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, cy - 6);
+  ctx.lineTo(leftElbow.x, leftElbow.y);
+  ctx.stroke();
+  // 右上腕（水平）
+  ctx.beginPath();
+  ctx.moveTo(cx + 10, cy - 6);
+  ctx.lineTo(rightElbow.x, rightElbow.y);
+  ctx.stroke();
+
+  // 5. 前腕とお椀の手（肘から先だけが動く！）
+  const hands = PLAYER_HANDS[playerPos];
+  const leftHand = HAND_POS[hands.left];
+  const rightHand = HAND_POS[hands.right];
+
+  // 左前腕
+  ctx.beginPath();
+  ctx.moveTo(leftElbow.x, leftElbow.y);
+  ctx.lineTo(leftHand.x, leftHand.y);
+  ctx.stroke();
+  // 左手（お椀型セグメント）
+  ctx.beginPath();
+  ctx.arc(leftHand.x, leftHand.y, 6.5, 0, Math.PI);
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // 右前腕
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(rightElbow.x, rightElbow.y);
+  ctx.lineTo(rightHand.x, rightHand.y);
+  ctx.stroke();
+  // 右手（お椀型セグメント）
+  ctx.beginPath();
+  ctx.arc(rightHand.x, rightHand.y, 6.5, 0, Math.PI);
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // 6. 足のアニメーション（左に手を動かしたら右足が跳ね上がる！）
+  if (playerPos === 0) {
+    // 左構え：左足が着地、右足が右上に跳ね上がる！
+    drawLeg(cx - 6, cy + 9, false, true, COLOR_LCD);
+    drawLeg(cx + 6, cy + 9, true, false, COLOR_LCD);
+  } else {
+    // 右構え：右足が着地、左足が左上に跳ね上がる！
+    drawLeg(cx - 6, cy + 9, true, true, COLOR_LCD);
+    drawLeg(cx + 6, cy + 9, false, false, COLOR_LCD);
+  }
+}
+
+// 起動（待機状態からスタート）
+draw();
+</script>
+</body>
+</html>
